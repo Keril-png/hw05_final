@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{author.first_name}} {{author.last_name}}{% endblock %}
+{% block content %}
+{% load user_filters %}
+{% load static %}
+<link rel="stylesheet" type="text/css" href="{% static 'posts/style.css' %">
+<main role="main" class="container">
+   <div class="row">
+        {% include "mini-templates/user.html" with author=author post_count=post_count %}
+
+        <div class="col-md-9">
+            
+                {% for post in page %}
+                    {% include "post_item.html" with post=post %}
+                {% endfor %}
+            
+                {% if page.has_other_pages %}
+                    {% include "paginator.html" with items=page paginator=paginator %}
+                {% endif %}
+                
+        </div>
+    </div>
+</main>
+{% endblock %} 
+
+

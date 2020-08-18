@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{author.first_name}} {{author.last_name}}{% endblock %}
+{% block content %}
+{% load user_filters %}
+{% load static %}
+<link rel="stylesheet" type="text/css" href="{% static 'posts/style.css' %">
+<main role="main" class="container">
+   <div class="row">
+        {% include "mini-templates/user.html" with author=author post_count=post_count %}
+
+        <div class="col-md-9">
+            {% include "post_item.html" with post=post %}
+            {% include "comments.html" with items=comments%}
+
+        </div>
+    </div>
+</main>
+{% endblock %} 

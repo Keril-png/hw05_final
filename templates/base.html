@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>{% block title %}The Last Social Media You'll Ever Need{% endblock %} | Yatube</title>
+    <!-- Загрузка статики -->
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'bootstrap/dist/css/bootstrap.min.css' %}">
+    <script src="{% static 'jquery/dist/jquery.min.js' %}"></script>
+    <script src="{% static 'bootstrap/dist/js/bootstrap.min.js' %}"></script>
+</head>
+
+<body>
+
+    <main>
+        <div class="container">
+            <a class="btn btn-sm color=blue" href="{% url 'index'%}" role="button">
+            <h1>{% block header %}<font color=Red size=7>Ya</font><font size=7>Tube</font>    <font color=#008080 size=5>The Last Social Media You'll Ever Need</font>{% endblock %}</h1>
+            </a>
+            {% block content %}
+            <!-- Содержимое страницы -->
+            {% endblock %}
+        </div>
+    </main>
+
+</body>
+
+</html>
