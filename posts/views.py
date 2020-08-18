@@ -1,6 +1,6 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
-from .models import Post, Group, User, Comment
+from .models import Post, Group, User, Comment, Follow
 from .forms import PostForm, CommentForm
 from django.core.paginator import Paginator
 from django.views.decorators.cache import cache_page
@@ -21,6 +21,23 @@ def index(request):
         }
     )
 
+@login_required
+def follow_index(request):
+    post_list = Post.objects.filter(author__following__user=request.user)
+    paginator = Paginator(post_list, 10)
+
+    page_number = request.GET.get('page')
+    page = paginator.get_page(page_number)
+    
+    return render(
+        request, 
+        "follow.html", 
+        {
+            'post': post_list,
+            "page": page, 
+            'paginator': paginator
+        }
+    )
 
 def group_posts(request, slug):
     group = get_object_or_404(Group, slug=slug)
@@ -66,13 +83,22 @@ def profile(request, username):
     paginator = Paginator(post_list, 10)
     page_number = request.GET.get('page')
     page = paginator.get_page(page_number)
+    following = False
+    userauthorized = False
+    if request.user.is_authenticated:
+        userauthorized = True
+        sub = Follow.objects.filter(user=request.user, author=user)
+        if sub.exists():
+            following = True
     return render(
         request, 
         'profile.html', 
-        {
+        {   
+            'userauthorized': userauthorized,
             'page': page, 
             'author': user,
-            'paginator': paginator
+            'paginator': paginator,
+            'following': following,
         }
     )
  
@@ -84,15 +110,24 @@ def post_view(request, username, post_id):
         pk=post_id
     )
     form = CommentForm()
-    comment = Comment.objects.filter(post=post_id)
+    comments = Comment.objects.filter(post=post_id)
+    following = False
+    userauthorized = False
+    if request.user.is_authenticated:
+        userauthorized = True
+        sub = Follow.objects.filter(user=request.user, author=post.author)
+        if sub.exists():
+            following = True
     return render(
         request,
         'post_view.html',
-        {
+        {   
+            'userauthorized': userauthorized,
             'post': post, 
             'author': post.author, 
-            'comments': comment, 
-            'form': form
+            'comments': comments, 
+            'form': form,
+            'following': following,
         }
     )
 
@@ -144,3 +179,25 @@ def server_error(request):
     return render(request, "misc/500.html", status=500)
 
 
+
+@login_required
+def profile_follow(request, username):
+    author = get_object_or_404(User, username=username)
+    samefollow = Follow.objects.filter(user=request.user, author=author)
+    if request.user != author and len(samefollow)==0:
+        Follow.objects.create(
+            user = request.user,
+            author = author
+        )
+    return redirect('profile', username=username)
+    
+
+
+@login_required
+def profile_unfollow(request, username):
+    author = get_object_or_404(User, username=username)
+    Follow.objects.filter(
+        user = request.user,
+        author = author
+    ).delete()
+    return redirect('profile', username=username)

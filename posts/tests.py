@@ -1,7 +1,7 @@
 from django.test import TestCase, override_settings
 from django.contrib.auth import get_user_model
 from django.test import Client
-from .models import Post, User, Group
+from .models import Post, User, Group, Follow
 from django.urls import reverse
 from django.core.cache import cache
 
@@ -13,6 +13,24 @@ class NotAuthotizedTests(TestCase):
     def test_NotAuthUserCantCreatePost(self):
         response = self.client.get(reverse('new_post'), follow=True)
         self.assertRedirects(response, '/auth/login/?next=/new/')
+
+    def test_AuthUserCanComment(self):
+        test_text = 'Just wanted to talk to you about baba'
+        author = User.objects.create(
+            username = 'avtor',
+            password = 'avtor'
+        )
+        post = Post.objects.create(
+            text = test_text,
+            author = author
+        )
+        response = self.client.get(
+            reverse('add_comment', args=[author, post.id]),
+        )
+        self.assertRedirects(response, f'/auth/login/?next=/{author.username}/{post.id}/comment')
+
+
+        
 
 
 class AuthorizedTests(TestCase):
@@ -167,6 +185,48 @@ class AuthorizedTests(TestCase):
                 errors='Загрузите правильное изображение. Файл, который вы загрузили, поврежден или не является изображением.'
             )
 
+    def test_AuthUserCanFollowAndUnfollow(self):
+        author = User.objects.create(
+            username = 'avtor',
+            password = 'avtor'
+        )
+        self.client.get(
+            reverse('profile_follow',
+            args = [author],
+            )
+        )
+        sub_count = len(Follow.objects.filter(user=self.myuser, author=author))
+        self.assertEqual(sub_count, 1)
+        self.client.get(
+            reverse('profile_unfollow',
+            args = [author],
+            )
+        )
+        sub_count = len(Follow.objects.filter(user=self.myuser, author=author))
+        self.assertEqual(sub_count, 0)
+    
+    def test_AuthUserCanComment(self):
+        test_text = 'Just wanted to talk to you about baba'
+        post = Post.objects.create(
+            text = test_text, 
+            group = self.group1,
+            author = self.myuser
+        )
+        self.client.post(
+            reverse('add_comment', args=[self.myuser.username, post.id]),
+            {'text': 'koment'}
+        )
+        response = self.client.get(
+            reverse('post', args = [self.myuser.username, post.id])
+        )
+
+        comments = response.context.get('comments')
+        self.assertEqual(len(comments),1)
+        self.assertEqual(comments[0].text, 'koment')
+
+
+    
+
 
 class CodesTests(TestCase):
     def SetUp(self):
@@ -202,7 +262,7 @@ class CacheTest(TestCase):
 
         
         response = self.client.get(reverse('index'))
-        self.assertNotContains(response, new_text)
+        self.assertContains(response, new_text)
                 
     
 
