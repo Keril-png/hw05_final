@@ -204,6 +204,38 @@ class AuthorizedTests(TestCase):
         )
         sub_count = len(Follow.objects.filter(user=self.myuser, author=author))
         self.assertEqual(sub_count, 0)
+
+    def test_UserCanSeeFollowedPosts(self):
+        author = User.objects.create(
+            username = 'avtor',
+            password = 'avtor'
+        )
+        post = Post.objects.create(
+            text = 'test_text', 
+            author = author
+        )
+        self.client.get(
+            reverse('profile_follow',
+            args = [author],
+            )
+        )
+        response = self.client.get(
+            reverse('follow_index')
+        )
+        needed_post = response.context['paginator'].object_list[0]
+        gotten_post = Post.objects.filter(author=author)[0]
+        self.assertEqual(
+            needed_post,
+            gotten_post            
+        )
+        self.client.get(
+            reverse('profile_unfollow',
+            args = [author],
+            )
+        )
+        self.assertEqual(len(response.context['paginator'].object_list), 0)
+
+
     
     def test_AuthUserCanComment(self):
         test_text = 'Just wanted to talk to you about baba'
