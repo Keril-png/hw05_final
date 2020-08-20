@@ -307,7 +307,28 @@ class CodesTests(TestCase):
 
 class CacheTest(TestCase):
     
+    def setUp(self):
+        self.client = Client()
+        self.myuser = User.objects.create(
+            username = 'biba', 
+            password = 'boba'
+        )
+        self.client.force_login(self.myuser)
+
     def test_cache(self):
-        response = cache.get(reverse('index'), None)
-        self.assertEqual(response, None)
+        test_text = 'wasd'
+
+        response = self.client.get(reverse('index'))
+
+        self.client.post(
+            reverse('new_post'), 
+            {'text': test_text}, 
+            follow=True
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, test_text)
+        cache.clear()
+        response = self.client.get(reverse('index'))
+        self.assertContains(response, test_text)
                 
