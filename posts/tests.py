@@ -1,10 +1,12 @@
 from django.test import TestCase, override_settings
 from django.contrib.auth import get_user_model
 from django.test import Client
-from .models import Post, User, Group, Follow
+from .models import Post, User, Group, Follow, Comment
 from django.urls import reverse
 from django.core.cache import cache
-
+from io import BytesIO
+from PIL import Image
+from django.core.files.uploadedfile import SimpleUploadedFile
 
 class NotAuthotizedTests(TestCase):
     def SetUp(self):
@@ -14,7 +16,7 @@ class NotAuthotizedTests(TestCase):
         response = self.client.get(reverse('new_post'), follow=True)
         self.assertRedirects(response, '/auth/login/?next=/new/')
 
-    def test_AuthUserCanComment(self):
+    def test_NotAuthUserCantComment(self):
         test_text = 'Just wanted to talk to you about baba'
         author = User.objects.create(
             username = 'avtor',
@@ -27,10 +29,10 @@ class NotAuthotizedTests(TestCase):
         response = self.client.get(
             reverse('add_comment', args=[author, post.id]),
         )
-        self.assertRedirects(response, f'/auth/login/?next=/{author.username}/{post.id}/comment')
 
+        self.assertRedirects(response, reverse('login')+'?next='+reverse('add_comment', args=[author, post.id]))
 
-        
+        self.assertEquals(0, len(Comment.objects.filter(author=author, post=post)))
 
 
 class AuthorizedTests(TestCase):
@@ -76,21 +78,23 @@ class AuthorizedTests(TestCase):
         self.assertEqual(new_post.author, self.myuser)
         self.assertEqual(new_post.group, self.group1)
     
+    
     def contains_check(self, url, text, post_id, author, group):
-        cache.clear()
         response = self.client.get(url)
         if response.context.get('paginator') is None:
             post = response.context.get('post')
         else:
             p = response.context.get('paginator')
             self.assertEqual(1, p.count)
-            post = p.page(1).object_list[0]
+            post = response.context['page'].object_list[0]
 
         self.assertEqual(post.text, text)
         self.assertEqual(post.author, author)
         self.assertEqual(post.group, group)
 
+    @override_settings(CACHES = {'default': {'BACKEND': 'django.core.cache.backends.dummy.DummyCache'}})
     def test_PostIsEverywhere(self):
+        cache.clear()
         test_text = 'Just wanted to talk to you about baba'
         post = Post.objects.create(
             text = test_text, 
@@ -110,6 +114,7 @@ class AuthorizedTests(TestCase):
         for url in urls:
             self.contains_check(url, test_text, post.id, self.myuser, self.group1)
 
+    @override_settings(CACHES = {'default': {'BACKEND': 'django.core.cache.backends.dummy.DummyCache'}})
     def test_AuthUserCanEdit(self):
         test_text = 'Just wanted to talk to you about baba'
         new_text = 'Just wanted to talk to you about us...'
@@ -140,6 +145,7 @@ class AuthorizedTests(TestCase):
         response = self.client.get(reverse('group', kwargs={'slug': self.group1.slug}))
         self.assertEqual(response.context.get('paginator').count, 0)
 
+    @override_settings(CACHES = {'default': {'BACKEND': 'django.core.cache.backends.dummy.DummyCache'}})
     def test_ImageExists(self):
         test_text = 'Just wanted to talk to you about baba'
         post = Post.objects.create(
@@ -147,10 +153,17 @@ class AuthorizedTests(TestCase):
             group = self.group1,
             author = self.myuser
         )
-        with open(self.image_path, 'rb') as img:     
+
+        image_obj = BytesIO()
+        image = Image.new("RGBA", size=(100, 100), color=(255, 255, 255))
+        image.save(image_obj, 'png')
+        image_obj.seek(0)
+        img = SimpleUploadedFile('media/posts/image.png', image_obj.read(), 'image/png')
+
+        with open('media/posts/image.png', 'rb') as file:
             self.client.post(
                 reverse('post_edit', args=[self.myuser.username, post.id]), 
-                {'author': self.myuser, 'text': 'post with image', 'image': img}
+                {'author': self.myuser, 'text': 'post with image', 'image': file}
             )
 
         urls = [
@@ -185,7 +198,7 @@ class AuthorizedTests(TestCase):
                 errors='Загрузите правильное изображение. Файл, который вы загрузили, поврежден или не является изображением.'
             )
 
-    def test_AuthUserCanFollowAndUnfollow(self):
+    def test_AuthUserCanFollow(self):
         author = User.objects.create(
             username = 'avtor',
             password = 'avtor'
@@ -195,44 +208,66 @@ class AuthorizedTests(TestCase):
             args = [author],
             )
         )
-        sub_count = len(Follow.objects.filter(user=self.myuser, author=author))
-        self.assertEqual(sub_count, 1)
+        sub_exists = Follow.objects.filter(user=self.myuser, author=author).exists()
+        self.assertEqual(sub_exists, True)
+
+    def test_AuthUserCanUnfollow(self):
+        author = User.objects.create(
+            username = 'avtor',
+            password = 'avtor'
+        )
+        Follow.objects.create(
+            user=self.myuser, 
+            author=author
+        )
         self.client.get(
             reverse('profile_unfollow',
             args = [author],
             )
         )
-        sub_count = len(Follow.objects.filter(user=self.myuser, author=author))
-        self.assertEqual(sub_count, 0)
+        sub_exists = Follow.objects.filter(user=self.myuser, author=author).exists()
+        self.assertEqual(sub_exists, False)
 
-    def test_UserCanSeeFollowedPosts(self):
+    def test_UserSeeOnlyFollowedPosts(self):
         author = User.objects.create(
             username = 'avtor',
             password = 'avtor'
         )
+        
         post = Post.objects.create(
             text = 'test_text', 
+            group = self.group1,
             author = author
         )
-        self.client.get(
-            reverse('profile_follow',
-            args = [author],
-            )
+        Follow.objects.create(
+            user=self.myuser, 
+            author=author
+        )
+        
+        self.contains_check(
+            reverse('follow_index'), 
+            post.text, 
+            post.id, 
+            author,
+            self.group1
+        )
+
+    def test_UserCantSeeUnfollowedPosts(self):
+        author = User.objects.create(
+            username = 'avtor',
+            password = 'avtor'
+        )
+        
+        post = Post.objects.create(
+            text = 'test_text', 
+            group = self.group1,
+            author = author
         )
         response = self.client.get(
             reverse('follow_index')
         )
-        needed_post = response.context['paginator'].object_list[0]
-        gotten_post = Post.objects.filter(author=author)[0]
-        self.assertEqual(
-            needed_post,
-            gotten_post            
-        )
-        self.client.get(
-            reverse('profile_unfollow',
-            args = [author],
-            )
-        )
+        if Follow.objects.filter(user=self.myuser, author=author).exists():
+            Follow.objects.filter(user=self.myuser, author=author).delete()
         self.assertEqual(len(response.context['paginator'].object_list), 0)
 
 
@@ -252,12 +287,13 @@ class AuthorizedTests(TestCase):
             reverse('post', args = [self.myuser.username, post.id])
         )
 
-        comments = response.context.get('comments')
+        comments = Comment.objects.filter(
+            post=post, 
+            text='koment',
+            author=self.myuser
+        )
         self.assertEqual(len(comments),1)
-        self.assertEqual(comments[0].text, 'koment')
-
-
-    
+        self.assertEqual(comments[0].text, 'koment')    
 
 
 class CodesTests(TestCase):
@@ -292,11 +328,8 @@ class CacheTest(TestCase):
             Follow=True
         )
 
-        
         response = self.client.get(reverse('index'))
+        self.assertNotContains(response, new_text)
+        cache.clear()
         self.assertContains(response, new_text)
                 
-    
-
-
-        

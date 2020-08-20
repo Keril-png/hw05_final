@@ -13,23 +13,16 @@
 </head>
 
 <body>
-
+    {% include 'nav.html' %}
     <main>
         <div class="container">
-            
-            <h1>{% block header %}
-                <a class="btn btn-sm color=blue" href="{% url 'index'%}" role="button"><font color=Red size=7>Ya</font><font size=7>Tube</font>    <font color=#008080 size=5>The Last Social Media You'll Ever Need</font> </a>
-                <a class="btn btn-sm" href="{% url 'new_post'%}" role="button"> <font size=5 color=blue>Новый пост</font> </a>
-                {% endblock %}
-            </h1>
-            
-            
+            <!-- <h1>{% block header %}The Last Social Media You'll Ever Need{% endblock %}</h1> -->
             {% block content %}
             <!-- Содержимое страницы -->
             {% endblock %}
         </div>
     </main>
-
+    {% include 'footer.html' %}
 </body>
 
 </html>
