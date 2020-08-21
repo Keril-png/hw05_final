@@ -23,7 +23,9 @@ def index(request):
 
 @login_required
 def follow_index(request):
-    post_list = Post.objects.order_by('-pub_date').filter(author__following__user=request.user)
+    post_list = Post.objects.order_by('-pub_date').filter(
+        author__following__user=request.user
+    )
     paginator = Paginator(post_list, 10)
 
     page_number = request.GET.get('page')
@@ -84,16 +86,16 @@ def profile(request, username):
     paginator = Paginator(post_list, 10)
     page_number = request.GET.get('page')
     page = paginator.get_page(page_number)
-    following = False
-    follows_count = Follow.objects.filter(author=author).count
-    subs_count = Follow.objects.filter(user=author).count
     
 
-    if request.user.is_authenticated:
-        if Follow.objects.filter(user=request.user, author=author).exists():
-            following = True
-        if request.user == author:
-            profile = False
+    following = (
+        request.user.is_authenticated and Follow.objects.filter(
+            user=request.user, 
+            author=author
+        ).exists()
+    ) 
+    if request.user.is_authenticated and request.user == author:
+        profile = False
         
             
     return render(
@@ -102,8 +104,6 @@ def profile(request, username):
         {   
             'profile': profile,
             'posts_count': posts_count,
-            'follows_count': follows_count,
-            'subs_count': subs_count,
             'page': page, 
             'author': author,
             'paginator': paginator,
@@ -137,7 +137,6 @@ def post_view(request, username, post_id):
             'subs_count': subs_count,
             'post': post, 
             'author': post.author, 
-            'comments': comments, 
             'form': form,
         }
     )
@@ -186,7 +185,6 @@ def page_not_found(request, exception):
 
 def server_error(request):
     return render(request, "misc/500.html", status=500)
-
 
 
 @login_required

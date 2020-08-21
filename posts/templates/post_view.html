@@ -10,7 +10,7 @@
 
         <div class="col-md-9">
             {% include "post_item.html" with post=post %}
-            {% include "comments.html" with items=comments%}
+            {% include "comments.html" with items=post.comments.all %}
 
         </div>
     </div>

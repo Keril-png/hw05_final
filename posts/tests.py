@@ -32,7 +32,7 @@ class NotAuthotizedTests(TestCase):
 
         self.assertRedirects(response, reverse('login')+'?next='+reverse('add_comment', args=[author, post.id]))
 
-        self.assertEquals(0, len(Comment.objects.filter(author=author, post=post)))
+        self.assertEquals(0, Comment.objects.filter(author=author, post=post).count())
 
 
 class AuthorizedTests(TestCase):
@@ -53,8 +53,6 @@ class AuthorizedTests(TestCase):
             description = 'our square of b-boys'
         )
         self.client.force_login(self.myuser)
-        self.image_path = 'media/posts/med_1547914593_image.jpg'
-        self.random_path = 'posts/urls.py'
 
     def test_Profile(self):
         
@@ -79,21 +77,21 @@ class AuthorizedTests(TestCase):
         self.assertEqual(new_post.group, self.group1)
     
     
-    def contains_check(self, url, text, post_id, author, group):
-        cache.clear()
+    def contains_check(self, url, text, author, group):
+
         response = self.client.get(url)
         if response.context.get('paginator') is None:
             post = response.context.get('post')
         else:
             p = response.context['paginator']
             self.assertEqual(1, p.count)
-            post = response.context['page'].object_list[0]
+            post = response.context['page'][0]
 
         self.assertEqual(post.text, text)
         self.assertEqual(post.author, author)
         self.assertEqual(post.group, group)
 
-    
+    @override_settings(CACHES = {'default': {'BACKEND': 'django.core.cache.backends.dummy.DummyCache'}})
     def test_PostIsEverywhere(self):
         test_text = 'Just wanted to talk to you about baba'
         post = Post.objects.create(
@@ -112,9 +110,9 @@ class AuthorizedTests(TestCase):
         ]
 
         for url in urls:
-            self.contains_check(url, test_text, post.id, self.myuser, self.group1)
+            self.contains_check(url, test_text, self.myuser, self.group1)
 
-    
+    @override_settings(CACHES = {'default': {'BACKEND': 'django.core.cache.backends.dummy.DummyCache'}})
     def test_AuthUserCanEdit(self):
         test_text = 'Just wanted to talk to you about baba'
         new_text = 'Just wanted to talk to you about us...'
@@ -140,12 +138,12 @@ class AuthorizedTests(TestCase):
         ]
 
         for url in urls:
-            self.contains_check(url, new_text, post.id, self.myuser, self.group2)
+            self.contains_check(url, new_text, self.myuser, self.group2)
         
         response = self.client.get(reverse('group', kwargs={'slug': self.group1.slug}))
         self.assertEqual(response.context.get('paginator').count, 0)
 
-    
+    @override_settings(CACHES = {'default': {'BACKEND': 'django.core.cache.backends.dummy.DummyCache'}})
     def test_ImageExists(self):
         test_text = 'Just wanted to talk to you about baba'
         post = Post.objects.create(
@@ -160,11 +158,10 @@ class AuthorizedTests(TestCase):
         image_obj.seek(0)
         img = SimpleUploadedFile('media/posts/image.png', image_obj.read(), 'image/png')
 
-        with open('media/posts/image.png', 'rb') as file:
-            self.client.post(
-                reverse('post_edit', args=[self.myuser.username, post.id]), 
-                {'author': self.myuser, 'text': 'post with image', 'image': file}
-            )
+        self.client.post(
+            reverse('post_edit', args=[self.myuser.username, post.id]), 
+            {'author': self.myuser, 'text': 'post with image', 'image': img}
+        )
 
         urls = [
             reverse('index'),
@@ -181,17 +178,22 @@ class AuthorizedTests(TestCase):
 
     def test_ImageNotExists(self):
         test_text = 'Just wanted to talk to you about baba'
+        random_path = 'posts/urls.py'
         post = Post.objects.create(
             text = test_text, 
             group = self.group1,
             author = self.myuser
         )
-        with open(self.random_path, 'rb') as img:     
-            response = self.client.post(
+        image_obj = BytesIO()
+        image = Image.new("RGBA", size=(5, 100), color=(255, 255, 255))
+        image.save(image_obj, 'gif')
+        image_obj.seek(0)
+        img = SimpleUploadedFile('media/posts/image.gif', image_obj.read(), 'image/gif')
+        response = self.client.post(
                 reverse('post_edit', args=[self.myuser.username, post.id]), 
                 {'author': self.myuser, 'text': 'post with no image', 'image': img}
             )
-            self.assertFormError(
+        self.assertFormError(
                 response, 
                 'form', 
                 field='image', 
@@ -208,8 +210,8 @@ class AuthorizedTests(TestCase):
             args = [author],
             )
         )
-        sub_exists = Follow.objects.filter(user=self.myuser, author=author).exists()
-        self.assertEqual(sub_exists, True)
+        sub_count = Follow.objects.filter(user=self.myuser, author=author).count()
+        self.assertEqual(sub_count, 1)
 
     def test_AuthUserCanUnfollow(self):
         author = User.objects.create(
@@ -225,8 +227,8 @@ class AuthorizedTests(TestCase):
             args = [author],
             )
         )
-        sub_exists = Follow.objects.filter(user=self.myuser, author=author).exists()
-        self.assertEqual(sub_exists, False)
+        sub_count = self.myuser.following.count()
+        self.assertEqual(sub_count, 0)
 
     def test_UserSeeOnlyFollowedPosts(self):
         author = User.objects.create(
@@ -247,7 +249,6 @@ class AuthorizedTests(TestCase):
         self.contains_check(
             reverse('follow_index'), 
             post.text, 
-            post.id, 
             author,
             self.group1
         )
@@ -266,9 +267,7 @@ class AuthorizedTests(TestCase):
         response = self.client.get(
             reverse('follow_index')
         )
-        if Follow.objects.filter(user=self.myuser, author=author).exists():
-            Follow.objects.filter(user=self.myuser, author=author).delete()
-        self.assertEqual(len(response.context['paginator'].object_list), 0)
+        self.assertEqual(response.context['paginator'].object_list.count(), 0)
 
 
     
@@ -288,11 +287,9 @@ class AuthorizedTests(TestCase):
         )
 
         comments = Comment.objects.filter(
-            post=post, 
-            text='koment',
             author=self.myuser
         )
-        self.assertEqual(len(comments),1)
+        self.assertEqual(comments.count(), 1)
         self.assertEqual(comments[0].text, 'koment')    
 
 
@@ -317,18 +314,24 @@ class CacheTest(TestCase):
 
     def test_cache(self):
         test_text = 'wasd'
-
-        response = self.client.get(reverse('index'))
-
-        self.client.post(
-            reverse('new_post'), 
-            {'text': test_text}, 
-            follow=True
+        new_text = 'dsaw'
+        post = Post.objects.create(
+            text = test_text, 
+            author = self.myuser
         )
-        
+        response = self.client.get(reverse('index'))
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, test_text)
-        cache.clear()
+
+        self.client.post(
+            reverse('post_edit', args=[self.myuser.username, post.id]), 
+            {'text': new_text, }, 
+            Follow=True
+        )
         response = self.client.get(reverse('index'))
-        self.assertContains(response, test_text)
+        self.assertNotContains(response, new_text)
+        cache.clear()
+        self.assertContains(response, new_text)
+        
+        
                 
