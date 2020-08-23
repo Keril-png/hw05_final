@@ -7,6 +7,7 @@ from django.core.cache import cache
 from io import BytesIO
 from PIL import Image
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.files.temp import NamedTemporaryFile
 
 class NotAuthotizedTests(TestCase):
     def SetUp(self):
@@ -37,6 +38,7 @@ class NotAuthotizedTests(TestCase):
 
 class AuthorizedTests(TestCase):
     def setUp(self):
+        cache.clear()
         self.client = Client()
         self.myuser = User.objects.create(
             username = 'biba', 
@@ -78,7 +80,7 @@ class AuthorizedTests(TestCase):
     
     
     def contains_check(self, url, text, author, group):
-
+        
         response = self.client.get(url)
         if response.context.get('paginator') is None:
             post = response.context.get('post')
@@ -184,21 +186,18 @@ class AuthorizedTests(TestCase):
             group = self.group1,
             author = self.myuser
         )
-        image_obj = BytesIO()
-        image = Image.new("RGBA", size=(5, 100), color=(255, 255, 255))
-        image.save(image_obj, 'gif')
-        image_obj.seek(0)
-        img = SimpleUploadedFile('media/posts/image.gif', image_obj.read(), 'image/gif')
+        temp = NamedTemporaryFile(suffix='txt')
+        file = open(temp.name, mode='rb')
         response = self.client.post(
                 reverse('post_edit', args=[self.myuser.username, post.id]), 
-                {'author': self.myuser, 'text': 'post with no image', 'image': img}
+                {'author': self.myuser, 'text': 'post with no image', 'image': file}
             )
         self.assertFormError(
                 response, 
                 'form', 
                 field='image', 
-                errors='Загрузите правильное изображение. Файл, который вы загрузили, поврежден или не является изображением.'
-            )
+                errors='Отправленный файл пуст.'
+        )
 
     def test_AuthUserCanFollow(self):
         author = User.objects.create(
@@ -321,16 +320,17 @@ class CacheTest(TestCase):
         )
         response = self.client.get(reverse('index'))
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, test_text)
+        self.assertContains(response, test_text)
 
         self.client.post(
             reverse('post_edit', args=[self.myuser.username, post.id]), 
             {'text': new_text, }, 
             Follow=True
-        )
+        )        
         response = self.client.get(reverse('index'))
         self.assertNotContains(response, new_text)
         cache.clear()
+        response = self.client.get(reverse('index'))
         self.assertContains(response, new_text)
         
         
