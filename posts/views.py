@@ -94,15 +94,13 @@ def profile(request, username):
             author=author
         ).exists()
     ) 
-    if request.user.is_authenticated and request.user == author:
-        profile = False
+    
         
             
     return render(
         request, 
         'profile.html', 
         {   
-            'profile': profile,
             'posts_count': posts_count,
             'page': page, 
             'author': author,
@@ -122,10 +120,6 @@ def post_view(request, username, post_id):
     author = get_object_or_404(User, username=username)
     posts_count = author.posts.all().count
     form = CommentForm()
-    comments = post.comments.all()
-    following = False
-    follows_count = Follow.objects.filter(author=author).count
-    subs_count = Follow.objects.filter(user=author).count
     
     return render(
         request,
@@ -133,8 +127,6 @@ def post_view(request, username, post_id):
         {   
             'profile': profile,
             'posts_count': posts_count,
-            'follows_count': follows_count,
-            'subs_count': subs_count,
             'post': post, 
             'author': post.author, 
             'form': form,
@@ -204,9 +196,7 @@ def profile_follow(request, username):
 @login_required
 def profile_unfollow(request, username):
     author = get_object_or_404(User, username=username)
-    if Follow.objects.filter(user = request.user, author = author).exists():
-        Follow.objects.filter(
-            user = request.user,
-            author = author
-        ).delete()
+    follows = Follow.objects.filter(user = request.user, author = author)
+    if follows.exists():
+        follows.delete()
     return redirect('profile', username=username)

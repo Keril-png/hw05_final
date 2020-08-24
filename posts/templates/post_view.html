@@ -6,8 +6,11 @@
 <link rel="stylesheet" type="text/css" href="{% static 'posts/style.css' %">
 <main role="main" class="container">
    <div class="row">
+    <div class="row">
+        <div class="col-md-3 mb-3 mt-1">
         {% include "mini-templates/user.html" with author=author post_count=post_count %}
-
+    </div>
+</div>   
         <div class="col-md-9">
             {% include "post_item.html" with post=post %}
             {% include "comments.html" with items=post.comments.all %}

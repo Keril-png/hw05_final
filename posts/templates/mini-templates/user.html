@@ -1,5 +1,4 @@
-<div class="row">
-    <div class="col-md-3 mb-3 mt-1">
+
         <div class="card">
                 <div class="card-body">
                         <div class="h2">
@@ -25,20 +24,4 @@
                                 </div>
                         </li>
                 </ul>
-                {% if profile %}
-                <li class="list-group-item">
-                        {% if following %}
-                        <a class="btn btn-lg btn-light" 
-                                href="{% url 'profile_unfollow' author.username %}" role="button"> 
-                                Отписаться 
-                        </a> 
-                        {% else %}
-                        <a class="btn btn-lg btn-primary" 
-                                href="{% url 'profile_follow' author.username %}" role="button">
-                        Подписаться 
-                        </a>
-                        {% endif %}
-                </li>
-                {% endif %}
-        </div>
-</div>
+
